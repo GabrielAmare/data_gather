@@ -57,8 +57,8 @@ class Wikitionnaire(GathererTemplate):
                     if mood and tense and entity:
                         code = f'VER-CON-{mood}-{tense}-{entity}'
                         result.add(code)
-                    else:
-                        print('#', word, mood, tense, item)
+                    # else:
+                    #     print('#', word, mood, tense, item)
                 else:
                     tense = None
 
