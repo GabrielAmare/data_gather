@@ -188,8 +188,14 @@ class Wikitionnaire(GathererTemplate):
                                 data = map(str.strip, data)
                                 data = filter(len, data)
                                 data = list(data)
-                                if data[0] == 'Singulier' and data[1] == 'Pluriel':
-                                    number = 'S' if data[2] == word else 'P' if data[3] == word else '?'
+                                if len(data) == 5:
+                                    if data[0] == 'Singulier' and data[1] == 'Pluriel':
+                                        number = 'S' if data[2] == word else 'P' if data[3] == word else '?'
+                                if len(data) == 2:
+                                    if data[0] == 'Invariable':
+                                        number = '' if data[1].startswith(word) else '?'
+                                else:
+                                    print(data)
                     elif element.name == 'p':  # text
                         if lang == 'FR' and typecode == 'NOM-COM':
                             gender = cls.read_NOM_COM_gender(word, element, gender)
