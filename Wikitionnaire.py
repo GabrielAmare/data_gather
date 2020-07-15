@@ -50,10 +50,12 @@ class Wikitionnaire(GathererTemplate):
                         entity = '2S'
                     elif startswith(item, 'il/elle/on', "qu'il/elle/on", "qu’il/elle/on"):
                         entity = '3S'
-                    elif item.startswith('(masculin singulier)'):
+                    elif startswith(item, '(masculin singulier)'):
                         entity = '3SM'
-                    elif item.startswith('(2e personne du singulier)'):
+                    elif startswith(item, '(2e personne du singulier)'):
                         entity = '2S'
+                    elif startswith(item, 'ils/elles', 'qu’ils/elles'):
+                        entity = '3P'
                     if mood and tense and entity:
                         code = f'VER-CON-{mood}-{tense}-{entity}'
                         result.add(code)
@@ -63,25 +65,43 @@ class Wikitionnaire(GathererTemplate):
                     tense = None
 
     @classmethod
-    def read_NOM_COM_gender(cls, word, element, gender):
-        if element.text.startswith(word):
-            if element.text.endswith('féminin\n'):
+    def read_NOM_COM_gender(cls, word, element, gender, number):
+        text = element.text
+        if text.startswith(word):
+            if 'féminin' in text and not 'masculin' in text:
+                # if element.text.endswith('féminin\n'):
                 gender = 'F'
-            elif element.text.endswith('masculin\n'):
+            elif 'masculin' in text and not 'féminin' in text:
+                # elif element.text.endswith('masculin\n'):
                 gender = 'M'
-            else:
-                gender = None
-        return gender
+            elif 'masculin' in text and 'féminin' in text:
+                gender = ''
+
+            if 'singulier' in text and not 'pluriel' in text:
+                # if element.text.endswith('féminin\n'):
+                number = 'S'
+            elif 'pluriel' in text and not 'singulier' in text:
+                # elif element.text.endswith('masculin\n'):
+                number = 'P'
+            elif 'pluriel' in text and 'singulier' in text:
+                number = ''
+        return gender, number
 
     @classmethod
     def read_subtitle(cls, result, element):
         typecode = None
         if element.text.startswith('Préposition'):
             result.add('PRE')
+        elif element.text.startswith('Nom de famille'):
+            result.add('NOM-PRO-3')
         elif element.text.startswith('Forme de verbe'):
             typecode = 'VER-CON'
         elif element.text.startswith('Nom commun'):
             typecode = 'NOM-COM'
+        elif element.text.startswith('Nom propre'):
+            typecode = 'NOM-PRO'
+        elif element.text.startswith('Prénom'):
+            typecode = 'NOM-PRO'
         elif element.text.startswith('Article défini'):
             typecode = 'ART-DEF'
         elif element.text.startswith('Article indéfini'):
@@ -126,7 +146,7 @@ class Wikitionnaire(GathererTemplate):
         elif element.text.startswith('Forme de pronom'):
             pass
         elif element.text.startswith('Adjectif'):
-            pass
+            typecode = 'ADJ-QUA'
         elif element.text.startswith('Postposition'):
             pass
         # IGNORED SECTIONS NOT DEFINING WORDS
@@ -149,10 +169,36 @@ class Wikitionnaire(GathererTemplate):
         elif element.text == 'Symbole [modifier le wikicode]':
             pass
         else:
-            print(f"""                          elif element.text.startswith({repr(element.text)}):
-                pass""")
+            print(f"""        elif element.text.startswith({repr(element.text)}):
+            pass""")
 
         return typecode
+
+    @classmethod
+    def parse_ADJ_QUA_table(cls, result, word, element):
+        data = element.text.split('\n')
+        data = map(str.strip, data)
+        data = filter(len, data)
+        data = list(data)
+        formats = [
+            (2, {0: 'Invariable'}, {1: 'ADJ-QUA-3'}),
+            (4, {0: 'Masculin', 2: 'Féminin'}, {1: 'ADJ-QUA-3M', 3: 'ADJ-QUA-3F'}),
+            (5, {0: 'Singulier', 1: 'Pluriel'}, {2: 'ADJ-QUA-3S', 3: 'ADJ-QUA-3P'}),
+            (6, {0: 'Singulier', 1: 'Pluriel', 2: 'Masculinet féminin'}, {3: 'ADJ-QUA-3S', 4: 'ADJ-QUA-3P'}),
+            (7, {0: 'Singulier', 1: 'Pluriel', 2: 'Masculin', 4: 'Féminin'}, {3: 'ADJ-QUA-3M', 5: 'ADJ-QUA-3SF', 6: 'ADJ-QUA-3PF'}),
+            (8, {0: 'Singulier', 1: 'Pluriel', 2: 'Masculin', 5: 'Féminin'}, {3: 'ADJ-QUA-3SM', 4: 'ADJ-QUA-3PM', 6: 'ADJ-QUA-3SF', 7: 'ADJ-QUA-3PF'}),
+        ]
+        for L, X, Y in formats:
+            if len(data) == L and all(data[key] == val for key, val in X.items()):
+                for key, val in Y.items():
+                    if data[key].startswith(word):
+                        result.add(val)
+                        break
+                else:
+                    continue
+                break
+        else:
+            print('ADJ-QUA-3?? : table ->', word, data)
 
     @classmethod
     def scan(cls, word, document, result):
@@ -164,9 +210,7 @@ class Wikitionnaire(GathererTemplate):
             number = None
             for element in document.select('#bodyContent .mw-parser-output > *'):
                 if not isinstance(element, bs4.NavigableString):
-                    if element.name == 'div':
-                        pass
-                    elif element.name == 'h2':  # titre section
+                    if element.name == 'h2':  # titre section
                         if element.text == 'Français[modifier le wikicode]':
                             lang = 'FR'
                         else:
@@ -177,8 +221,6 @@ class Wikitionnaire(GathererTemplate):
 
                             # if typecode:
                             #     print(repr(word), repr(typecode))
-                    elif element.name == 'dl':
-                        pass
                     elif element.name == 'table':
                         if lang == 'FR':
                             if typecode == 'VER-CON':
@@ -188,19 +230,40 @@ class Wikitionnaire(GathererTemplate):
                                 data = map(str.strip, data)
                                 data = filter(len, data)
                                 data = list(data)
-                                if len(data) == 5:
-                                    if data[0] == 'Singulier' and data[1] == 'Pluriel':
-                                        number = 'S' if data[2] == word else 'P' if data[3] == word else '?'
-                                if len(data) == 2:
-                                    if data[0] == 'Invariable':
-                                        number = '' if data[1].startswith(word) else '?'
+                                if len(data) == 5 and data[0] == 'Singulier' and data[1] == 'Pluriel':
+                                    number = 'S' if data[2] == word else 'P' if data[3] == word else '?'
+                                elif len(data) == 2 and data[0] == 'Invariable':
+                                    number = '' if data[1].startswith(word) else '?'
+                                elif len(data) == 2 and data[0] == 'Singulier et pluriel':
+                                    number = '' if data[1].startswith(word) else '?'
+                                elif len(data) == 6 and data[0] == 'Singulier' and data[1] == 'Pluriel' and data[2] == 'Masculinet féminin':
+                                    if data[4].startswith(word):
+                                        result.add('NOM-COM-3P')
+                                    elif data[3].startswith(word):
+                                        result.add('NOM-COM-3P')
+                                    else:
+                                        print(f"NOM-COM-3?{gender if gender else '?'} : table ->", word, data)
                                 else:
-                                    print(data)
+                                    print(f"NOM-COM-3?{gender if gender else '?'} : table ->", word, data)
+                            elif typecode == 'ADJ-QUA':
+                                cls.parse_ADJ_QUA_table(result, word, element)
+
                     elif element.name == 'p':  # text
-                        if lang == 'FR' and typecode == 'NOM-COM':
-                            gender = cls.read_NOM_COM_gender(word, element, gender)
-                            if number and gender:
-                                result.add(f'NOM-COM-3{number}{gender}')
+                        if lang == 'FR':
+                            if typecode == 'NOM-COM':
+                                gender, number = cls.read_NOM_COM_gender(word, element, gender, number)
+                                if number is not None and gender is not None:
+                                    result.add(f'NOM-COM-3{number}{gender}')
+                                else:
+                                    print(f'-----> no gender ({gender}) or number ({number}) for {word}')
+                            elif typecode == 'NOM-PRO':
+                                gender, number = cls.read_NOM_COM_gender(word, element, gender, number)
+                                if gender is not None:
+                                    result.add(f'NOM-PRO-3{gender}')
+                                else:
+                                    print(f'-----> no gender ({gender}) for {word}')
+
+
                     elif element.name == 'ol':  # list
                         pass
                     elif element.name == 'h4':
@@ -209,9 +272,14 @@ class Wikitionnaire(GathererTemplate):
                         pass
                     elif element.name == 'h5':
                         pass
+                    elif element.name == 'dl':
+                        pass
+                    elif element.name == 'div':
+                        pass
 
         else:
             print(f"Wikitionnaire : {repr(word)} not found")
+
     #
     # @classmethod
     # def format_table(cls, table):
