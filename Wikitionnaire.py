@@ -430,21 +430,17 @@ class Wikitionnaire(GathererTemplate):
     @classmethod
     def getset(cls, word: str) -> set:
         result = set()
-        with open('log.txt', mode='a', encoding='utf-8') as logfile:
-            document = cls.get_html(f"https://fr.wiktionary.org/wiki/{word}")
+        if word:
+            word = word.lower()
 
+            document = cls.get_html(f"https://fr.wiktionary.org/wiki/{word}")
             if document:
                 cls.scan(word, document, result)
 
-                # summary = document.select_one("#toc")
-                # if summary:
-                #     for lang in document.select("#toc > ul > li > a"):
-                #         if lang.text.endswith('Français'):
-                #             cls.read_lang(result, word, document, lang, logfile=logfile)
-                #         elif lang.text.endswith('Anglais'):
-                #             pass
-                # else:
-                #     for section in document.select("h3"):
-                #         if not section.text.startswith('\n'):
-                #             cls.read_section(result, word, document, section, section, logfile=logfile)
+            u_word = word[0].upper() + word[1:]
+            if u_word != word:
+                document = cls.get_html(f"https://fr.wiktionary.org/wiki/{u_word}")
+                if document:
+                    cls.scan(u_word, document, result)
+
         return result
